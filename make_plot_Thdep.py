@@ -2,11 +2,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy as sp
 import os
+import pyvisco as visco
+from pyvisco import styles
 
-# positive convention for modulus and compliance
+# positive convention for compliance
 # J* = J1 + iJ2
-# M* = M1 + iM2
-# M* = 1 / J* -> M1 = J1/|J|^2 and M2 = -J2/|J|^2
+# M* = M1 - iM2
+# M* = 1 / J* -> M1 = J1/|J|^2 and M2 = J2/|J|^2
 
 def normcompliance_YT16(tau_n,T_h):
     
@@ -55,58 +57,78 @@ def modulus_delta(M1,M2,M1_Mx,M2_Mx):
 
     return M1-M1_Mx, M2-M2_Mx
 
-n_tau = 100
-n_theta = 3
-tau = 10**np.linspace(-12,3,n_tau)
-arr_theta = np.linspace(0.8,1.1,n_theta)
+def plot_modulus():
 
-M1_Mx,M2_Mx = normmod_Mx(tau)
-J1 = np.zeros((n_theta,n_tau))
-J2 = J1.copy()
-M1 = J1.copy()
-M2 = J1.copy()
-M1_delta = J1.copy()
-M2_delta = J1.copy()
+    n_tau = 1000
+    n_theta = 5
+    tau = 10**np.linspace(-11,4,n_tau)
+    arr_theta = np.linspace(0.8,1.1,n_theta)
 
-for i in range(n_theta):
+    M1_Mx,M2_Mx = normmod_Mx(tau)
+    J1 = np.zeros((n_theta,n_tau))
+    J2 = J1.copy()
+    M1 = J1.copy()
+    M2 = J1.copy()
+    M1_delta = J1.copy()
+    M2_delta = J1.copy()
 
-    theta = arr_theta[i]
-    J1[i,:],J2[i,:] = normcompliance_YT16(tau,theta)
-    M1[i,:],M2[i,:] = compliance2modulus(J1[i,:],J2[i,:])
-    M1_delta[i,:],M2_delta[i,:] = modulus_delta(M1[i,:],M2[i,:],M1_Mx,M2_Mx)
+    for i in range(n_theta):
 
-n_rows = 2
-n_cols = 2
-fig,ax=plt.subplots(n_rows,n_cols,figsize=(6*n_cols,3*n_rows))
-colors = ['red','green','blue','pink','cyan','magenta','yellow']
-arr_colors = colors * 10
+        theta = arr_theta[i]
+        J1[i,:],J2[i,:] = normcompliance_YT16(tau,theta)
+        M1[i,:],M2[i,:] = compliance2modulus(J1[i,:],J2[i,:])
+        M1_delta[i,:],M2_delta[i,:] = modulus_delta(M1[i,:],M2[i,:],M1_Mx,M2_Mx)
 
-for i in range(n_theta):    
+    n_rows = 2
+    n_cols = 2
+    fig,ax=plt.subplots(n_rows,n_cols,figsize=(6*n_cols,3*n_rows))
+    colors = ['red','green','blue','orange','purple']
+    n_multiply = int(n_theta / len(colors)) + 1
+    arr_colors = colors * n_multiply
 
-    ax[0,0].plot(tau,M1[i],color=arr_colors[i],label=f'Th={arr_theta[i]:.2f}')
-    ax[0,1].plot(tau,M2[i],color=arr_colors[i])
-    ax[1,0].plot(tau,M1_delta[i],arr_colors[i])
-    ax[1,1].plot(tau,M2_delta[i],arr_colors[i])
+    for i in range(n_theta):    
 
-ax[0,0].set_xscale('log', base=10)
-ax[0,0].set_xlabel(r'Normalised timescale $\tau/\tau_M$')
-ax[0,0].set_ylabel(r'$M_1/M_U$')
-ax[0,0].invert_xaxis()
-ax[0,1].set_xscale('log', base=10)
-ax[0,1].set_xlabel(r'Normalised timescale $\tau/\tau_M$')
-ax[0,1].set_ylabel(r'$M_2/M_U$')
-ax[0,1].invert_xaxis()
+        ax[0,0].plot(tau,M1[i],color=arr_colors[i],label=f'Th={arr_theta[i]:.2f}')
+        ax[0,1].plot(tau,M2[i],color=arr_colors[i])
+        ax[1,0].plot(tau,M1_delta[i],arr_colors[i])
+        ax[1,1].plot(tau,M2_delta[i],arr_colors[i])
 
-ax[1,0].set_xscale('log', base=10)
-ax[1,0].set_xlabel(r'Normalised timescale $\tau/\tau_M$')
-ax[1,0].set_ylabel(r'$(M_1-M_1^{Mx})/M_U$')
-ax[1,0].invert_xaxis()
-ax[1,1].set_xscale('log', base=10)
-ax[1,1].set_xlabel(r'Normalised timescale $\tau/\tau_M$')
-ax[1,1].set_ylabel(r'$(M_2-M_2^{Mx})/M_U$')
-ax[1,1].invert_xaxis()
+    ax[0,0].set_xscale('log', base=10)
+    ax[0,0].set_xlabel(r'Normalised timescale $\tau/\tau_M$')
+    ax[0,0].set_ylabel(r'$M_1/M_U$')
+    ax[0,0].invert_xaxis()
+    ax[0,1].set_xscale('log', base=10)
+    ax[0,1].set_xlabel(r'Normalised timescale $\tau/\tau_M$')
+    ax[0,1].set_ylabel(r'$M_2/M_U$')
+    ax[0,1].invert_xaxis()
 
-ax[0,0].legend()
-plt.tight_layout()
-plt.savefig(os.path.join("plot_output_Thdep","M_YT16_Thdep.jpg"),dpi=1200)
-plt.close()
+    ax[1,0].set_xscale('log', base=10)
+    ax[1,0].set_xlabel(r'Normalised timescale $\tau/\tau_M$')
+    ax[1,0].set_ylabel(r'$(M_1-M_1^{Mx})/M_U$')
+    ax[1,0].invert_xaxis()
+    ax[1,1].set_xscale('log', base=10)
+    ax[1,1].set_xlabel(r'Normalised timescale $\tau/\tau_M$')
+    ax[1,1].set_ylabel(r'$(M_2-M_2^{Mx})/M_U$')
+    ax[1,1].invert_xaxis()
+
+    ax[0,0].legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join("plot_output_Thdep","M_YT16_Thdep.jpg"),dpi=1200)
+    plt.close()
+
+def fit_prony(Th):
+
+    n_tau = 1000
+    tau = 10**np.linspace(-11,4,n_tau)
+    f = 1. / tau
+
+    J1,J2 = normcompliance_YT16(tau,Th)
+    M1,M2 = compliance2modulus(J1,J2)
+
+    arr_out =  np.zeros((n_tau,3))
+    arr_out[:,0] = f
+    arr_out[:,1] = M1
+    arr_out[:,2] = M2
+
+    np.savetxt(os.path.join(f_plot, f"output_Modified_Andrade.csv"),output_An, fmt=('%5.4e','%5.4e','%5.4e'), comments='', header=header,delimiter=",")
+    
