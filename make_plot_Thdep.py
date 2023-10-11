@@ -2,13 +2,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy as sp
 import os
+import pandas as pd
+import sys
+sys.path
+sys.executable
 import pyvisco as visco
-from pyvisco import styles
+#from pyvisco import styles
 
 # positive convention for compliance
 # J* = J1 + iJ2
 # M* = M1 - iM2
 # M* = 1 / J* -> M1 = J1/|J|^2 and M2 = J2/|J|^2
+
+f_out = os.path.join(".","data_output")
+os.makedirs(f_out,exist_ok=True)
 
 def normcompliance_YT16(tau_n,T_h):
     
@@ -118,6 +125,8 @@ def plot_modulus():
 
 def fit_prony(Th):
 
+    T_sol = 1326
+    T_input = Th*(T_sol + 273.15) - 273.15
     n_tau = 1000
     tau = 10**np.linspace(-11,4,n_tau)
     f = 1. / tau
@@ -130,5 +139,13 @@ def fit_prony(Th):
     arr_out[:,1] = M1
     arr_out[:,2] = M2
 
-    np.savetxt(os.path.join(f_plot, f"output_Modified_Andrade.csv"),output_An, fmt=('%5.4e','%5.4e','%5.4e'), comments='', header=header,delimiter=",")
+    header = '{0:^7s},{1:^7s},{2:^7s}\n{3:^7s},{4:^7s},{5:^7s}'.format('f','G_stor','G_loss','[unitless]','GPa','GPa')
+    file_out = os.path.join(f_out, f"prony_YT16_Th_{Th:.2f}.txt")
+    np.savetxt(file_out,arr_out,fmt=('%5.4e','%5.4e','%5.4e'),comments='',header=header,delimiter=",")
+
+    data = visco.load.file(file_out)
+    print(data)
+
+fit_prony(0.90)
+
     
