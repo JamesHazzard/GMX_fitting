@@ -7,7 +7,8 @@ import sys
 sys.path
 sys.executable
 import pyvisco as visco
-#from pyvisco import styles
+from pyvisco import styles
+styles.format_fig()
 
 # positive convention for compliance
 # J* = J1 + iJ2
@@ -15,7 +16,9 @@ import pyvisco as visco
 # M* = 1 / J* -> M1 = J1/|J|^2 and M2 = J2/|J|^2
 
 f_out = os.path.join(".","data_output")
+f_plot = os.path.join(".","plot_output_Thdep")
 os.makedirs(f_out,exist_ok=True)
+os.makedirs(f_plot,exist_ok=True)
 
 def normcompliance_YT16(tau_n,T_h):
     
@@ -41,7 +44,7 @@ def normcompliance_YT16(tau_n,T_h):
         sigma_p = 7
 
     J1_norm = 1 + ((A_b*(tau_n**alpha))/alpha) + (((np.sqrt(2*np.pi))/2)*A_p*sigma_p*(1-sp.special.erf((np.log(tau_p/tau_n))/(np.sqrt(2)*sigma_p))))
-    J2_norm = (np.pi/2)*((A_b*(tau_n**alpha))+(A_p*np.exp(-((np.log(tau_p/tau_n))**2)/(2*(sigma_p**2))))) + tau_n
+    J2_norm = (np.pi/2)*((A_b*(tau_n**alpha)) + (A_p*np.exp(-((np.log(tau_p/tau_n))**2)/(2*(sigma_p**2))))) + tau_n
 
     return J1_norm, J2_norm
 
@@ -123,12 +126,48 @@ def plot_modulus():
     plt.savefig(os.path.join("plot_output_Thdep","M_YT16_Thdep.jpg"),dpi=1200)
     plt.close()
 
+def plot_fit(df_master, df_GMaxw, units):
+    
+    modul = df_master.modul
+    stor = '{}_stor'.format(modul)
+    loss = '{}_loss'.format(modul)
+    relax = '{}_relax'.format(modul)
+    if df_master.domain == 'freq':
+        fig, (ax1, ax2) = plt.subplots(1,2, figsize=(8,0.75*4))
+        df_master.plot(x='f', y=[stor], label=["{}'(filter)".format(modul)],
+            ax=ax1, logx=True, logy=False, color=['C0'], 
+            alpha=0.5, ls='', marker='o', markersize=3)
+        df_master.plot(x='f', y=[loss], label=["{}''(filter)".format(modul)],
+            ax=ax2, logx=True, logy=False, color=['C1'], 
+            alpha=0.5, ls='', marker='o', markersize=3)
+        df_GMaxw.plot(x='f', y=[stor], label=["Prony fit"],
+            ax=ax1, logx=True, logy=False, ls='-', lw=2, color=['C0'])
+        df_GMaxw.plot(x='f', y=[loss], label=["Prony fit"],
+            ax=ax2, logx=True, logy=False, ls='-', lw=2, color=['C1'])
+        ax1.set_xlabel('Frequency (Hz)')
+        ax1.set_ylabel('Storage modulus ({})'.format(units[stor]))
+        ax2.set_xlabel('Frequency (Hz)')
+        ax2.set_ylabel('Loss modulus ({})'.format(units[stor])) 
+        ax1.legend()
+        ax2.legend()
+    elif df_master.domain == 'time':
+        fig, ax1 = plt.subplots(figsize=(4,0.75*4))
+        df_master.plot(x='t', y=[relax], ax=ax1, logx=True, logy=False, 
+            color=['gray'], ls='', marker='o', markersize=3,
+            label=["{}(filter)".format(modul)])
+        df_GMaxw.plot(x='t', y=[relax], ax=ax1, label=['Prony fit'],
+            logx=True, logy=False, ls='-', lw=2, color=['r'])
+        ax1.set_xlabel('Time ({})'.format(units['t']))
+        ax1.set_ylabel('Relaxation modulus ({})'.format(units[relax])) 
+        ax1.legend()
+    plt.savefig(os.path.join(f_plot, f"relaxation_modulus.jpg"), dpi=600)   
+
 def fit_prony(Th):
 
     T_sol = 1326
     T_input = Th*(T_sol + 273.15) - 273.15
-    n_tau = 1000
-    tau = 10**np.linspace(-11,4,n_tau)
+    n_tau = 201
+    tau = np.flip(10**np.linspace(-11,4,n_tau))
     f = 1. / tau
 
     J1,J2 = normcompliance_YT16(tau,Th)
@@ -139,13 +178,22 @@ def fit_prony(Th):
     arr_out[:,1] = M1
     arr_out[:,2] = M2
 
-    header = '{0:^7s},{1:^7s},{2:^7s}\n{3:^7s},{4:^7s},{5:^7s}'.format('f','G_stor','G_loss','[unitless]','GPa','GPa')
+    header = '{0:^7s},{1:^7s},{2:^7s}\n{3:^7s},{4:^7s},{5:^7s}'.format('f','G_stor','G_loss','Hz','GPa','GPa')  # freq. is actually normalised
     file_out = os.path.join(f_out, f"prony_YT16_Th_{Th:.2f}.txt")
     np.savetxt(file_out,arr_out,fmt=('%5.4e','%5.4e','%5.4e'),comments='',header=header,delimiter=",")
 
     data = visco.load.file(file_out)
-    print(data)
+    RefT=float(T_input)
+    domain = 'freq'
+    modul = 'G'
+    df_master, units = visco.load.user_master(data, domain, RefT, modul)
+    win = 1
+    df_master = visco.master.smooth(df_master, win)
+    df_dis = visco.prony.discretize(df_master,window='min')
+    print(df_dis.head())
+    prony, df_GMaxw = visco.prony.fit(df_dis,df_master,opt=True)
+    print(df_GMaxw.head())
+    print(prony)
+    plot_fit(df_master, df_GMaxw, units)
 
 fit_prony(0.90)
-
-    
