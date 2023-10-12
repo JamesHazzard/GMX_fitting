@@ -15,7 +15,7 @@ styles.format_fig()
 # M* = M1 - iM2
 # M* = 1 / J* -> M1 = J1/|J|^2 and M2 = J2/|J|^2
 
-f_out = os.path.join(".","data_output")
+f_out = os.path.join(".","plot_output_Thdep")
 f_plot = os.path.join(".","plot_output_Thdep")
 os.makedirs(f_out,exist_ok=True)
 os.makedirs(f_plot,exist_ok=True)
@@ -126,7 +126,7 @@ def plot_modulus():
     plt.savefig(os.path.join("plot_output_Thdep","M_YT16_Thdep.jpg"),dpi=1200)
     plt.close()
 
-def plot_fit(df_master, df_GMaxw, units):
+def plot_fit(df_master,df_GMaxw,units,theta):
     
     modul = df_master.modul
     stor = '{}_stor'.format(modul)
@@ -160,13 +160,13 @@ def plot_fit(df_master, df_GMaxw, units):
         ax1.set_xlabel('Time ({})'.format(units['t']))
         ax1.set_ylabel('Relaxation modulus ({})'.format(units[relax])) 
         ax1.legend()
-    plt.savefig(os.path.join(f_plot, f"relaxation_modulus.jpg"), dpi=600)   
+    plt.savefig(os.path.join(f_plot, f"relaxation_modulus_Th_{theta:.2f}.jpg"), dpi=600)   
 
-def fit_prony(Th):
+def fit_prony(Th,n_prony):
 
     T_sol = 1326
     T_input = Th*(T_sol + 273.15) - 273.15
-    n_tau = 201
+    n_tau = 1001
     tau = np.flip(10**np.linspace(-11,4,n_tau))
     f = 1. / tau
 
@@ -179,7 +179,7 @@ def fit_prony(Th):
     arr_out[:,2] = M2
 
     header = '{0:^7s},{1:^7s},{2:^7s}\n{3:^7s},{4:^7s},{5:^7s}'.format('f','G_stor','G_loss','Hz','GPa','GPa')  # freq. is actually normalised
-    file_out = os.path.join(f_out, f"prony_YT16_Th_{Th:.2f}.txt")
+    file_out = os.path.join(f_out, f"YT16_Th_{Th:.2f}.txt")
     np.savetxt(file_out,arr_out,fmt=('%5.4e','%5.4e','%5.4e'),comments='',header=header,delimiter=",")
 
     data = visco.load.file(file_out)
@@ -189,11 +189,50 @@ def fit_prony(Th):
     df_master, units = visco.load.user_master(data, domain, RefT, modul)
     win = 1
     df_master = visco.master.smooth(df_master, win)
-    df_dis = visco.prony.discretize(df_master,window='min')
-    print(df_dis.head())
+    df_dis = visco.prony.discretize(df_master,window='exact',nprony=n_prony)
     prony, df_GMaxw = visco.prony.fit(df_dis,df_master,opt=True)
-    print(df_GMaxw.head())
-    print(prony)
-    plot_fit(df_master, df_GMaxw, units)
+    plot_fit(df_master,df_GMaxw,units,Th)
+    file_pronyout = os.path.join(f_out,f"prony_coeff_YT16_Th_{Th:.2f}_N_{n_prony}.txt")
+    prony['df_terms'].to_csv(file_pronyout,index=False)
 
-fit_prony(0.90)
+    return prony['df_terms']
+
+def track_coeff_Thdep():
+
+    n_prony = 20
+    n_Th = 100
+    arr_Th = np.linspace(0.8,1.1,n_Th)
+    alpha = np.zeros((3,n_Th,n_prony)) # (Th/tau/alpha) x (Th_i) x (Nprony_i)
+
+    for i in range(n_Th):
+
+        theta = arr_Th[i]
+        file_pronyout = os.path.join(f_out,f"prony_coeff_YT16_Th_{theta:.2f}_N_{n_prony}.txt")
+
+        if os.path.exists(file_pronyout):
+            coeff = np.loadtxt(file_pronyout,delimiter=',',skiprows=1)
+        else:
+            coeff = fit_prony(theta,n_prony).to_numpy()
+
+        alpha[0,i,:] = np.zeros(n_prony) + theta
+        alpha[1,i,:] = coeff[:,0]
+        alpha[2,i,:] = coeff[:,1]
+
+    return alpha
+
+def plot_coeff_Thdep():
+
+    n_prony = 20
+    n_Th = 10
+    arr_Th = np.linspace(0.8,1.1,n_Th)
+    alpha = track_coeff_Thdep()
+
+    fig,ax=plt.subplots(4,5,figsize=(4*4,4*5))
+    ax=ax.flatten()
+    for i in range(n_prony):
+        ax[i].plot(alpha[0,:,i],alpha[2,:,i],color='k',label=fr'$i=${i+1},$\tau_i=${np.log10(alpha[1,0,i]):.3f}')
+        ax[i].legend(loc='upper left')
+    plt.tight_layout()
+    plt.savefig(os.path.join(f_plot,"coeff_Thdep.jpg"),dpi=600)
+
+plot_coeff_Thdep()
